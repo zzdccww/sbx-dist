@@ -2,6 +2,9 @@ module go-sbx
 
 go 1.24.7
 
+// Pinned source plus the EDUPCONN registration-retry fix; see SBX_PATCHES.md.
+replace github.com/sagernet/sing-cloudflared => ./third_party/sing-cloudflared
+
 require (
 	github.com/sagernet/sing v0.8.12-0.20260721063414-596db5dd6ef4
 	github.com/sagernet/sing-box v1.14.0-beta.2

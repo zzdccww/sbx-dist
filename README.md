@@ -16,6 +16,10 @@ This repo exists for two reasons:
    (modulo toolchain), the binaries shipped in Releases, so anyone who receives
    a `.so` from this repo can rebuild it and exercise their GPL-3.0 rights.
 
+The source revision, build run, release tag, and binary hashes for this snapshot
+are recorded in [`SOURCE.json`](./SOURCE.json). Each release tag retains its
+matching source tree, including the pinned local `sing-cloudflared` patch.
+
 ## What's here
 
 ```
@@ -106,8 +110,8 @@ needs `ARGO_AUTH` / `ARGO_DOMAIN` env vars set and is **not** run in CI.
 
 | Symbol | Purpose |
 | --- | --- |
-| `StartSingBox` | Start sing-box with a JSON payload (`config`, `workingDir`, `disableColor`, optional `tunnel{ token, hostname, backendPort }`). Blocking until stop. |
-| `StopSingBox` | Signal the running instance to stop and release the lock. |
+| `StartSingBox` | Start sing-box with a JSON payload (`config`, `workingDir`, `disableColor`, optional `tunnel{ token, hostname, backendPort }`). Return after startup; the library remains active in the process. |
+| `StopSingBox` | Stop the running instance and release its resources. |
 
 The launchers (Java via JNA, Node via koffi, Python via ctypes) declare this
 ABI themselves; only the `.so` is consumed. The `.h` header is not used.

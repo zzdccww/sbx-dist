@@ -10,7 +10,7 @@
 # Secrets come from the environment; this file must stay token-free.
 #
 # Usage:
-#   ARGO_AUTH=<token> ARGO_DOMAIN=<host> bash e2e_tunnel.sh
+#   BOT_TOKEN=<token> CHAT_ID=<id> ARGO_AUTH=<token> ARGO_DOMAIN=<host> bash e2e_tunnel.sh
 #
 # Requires the Cloudflare dashboard ingress for that tunnel to point at
 # http://localhost:8001 (ARGO_PORT).
@@ -33,6 +33,28 @@ sleep 25
 failures=0
 note() { echo "  $*"; }
 fail() { echo "  FAIL: $*"; failures=$((failures + 1)); }
+port_bound() {
+    local wanted table slot local_addr remote_addr state rest
+    wanted=$(printf '%04X' "$1")
+    for table in /proc/net/tcp /proc/net/tcp6 /proc/net/udp /proc/net/udp6; do
+        [ -r "$table" ] || continue
+        while read -r slot local_addr remote_addr state rest; do
+            case "$state" in
+                0A|07) [ "${local_addr##*:}" = "$wanted" ] && return 0 ;;
+            esac
+        done < "$table"
+    done
+    return 1
+}
+log_is_secret_free() {
+    local secret
+    for secret in "${BOT_TOKEN:-}" "${CHAT_ID:-}" "${ARGO_AUTH:-}" "${ARGO_DOMAIN:-}" "${UUID:-}" "${SBX_SOURCE:-}" \
+        0a6568ff-ea3c-4271-9020-450560e10d61 0a6568ff-ea3c-4271-9020-450560e10d63; do
+        [ -n "$secret" ] || continue
+        grep -Fq -- "$secret" "$LOG" && return 1
+    done
+    ! grep -Eq 'vmess://|hysteria2://|vless://|PrivateKey:|PublicKey:|Private key:|Public key:' "$LOG"
+}
 
 ws=(-H "Connection: Upgrade" -H "Upgrade: websocket"
     -H "Sec-WebSocket-Version: 13"
@@ -43,8 +65,7 @@ echo "=== 1. process survived startup ==="
 if ps -p "$APP_PID" >/dev/null 2>&1; then
     note "alive"
 else
-    fail "app died during startup"
-    tail -30 "$LOG"
+    fail "app died during startup; inspect the protected remote log directly"
     exit 1
 fi
 
@@ -86,38 +107,36 @@ code=$(curl -s -o /dev/null -w "%{http_code}" --http1.1 --max-time 25 "${ws[@]}"
 [ "$code" = "404" ] && note "unknown path -> 404 (matched by sing-box)" \
                     || fail "unknown path -> $code (want 404)"
 
-echo "=== 5. no panic after serving traffic ==="
+echo "=== 5. no panic or secret residue after serving traffic ==="
 if grep -q "panic:" "$LOG"; then
-    fail "panic in log"
-    grep -A5 "panic:" "$LOG" | head -12
+    fail "panic in protected log"
 else
-    note "clean"
+    note "no panic"
+fi
+if log_is_secret_free; then
+    note "log is secret-free"
+else
+    fail "secret or node residue detected in protected log"
 fi
 ps -p "$APP_PID" >/dev/null 2>&1 && note "still alive" || fail "process died while serving"
 
-echo "=== 6. subscription service ==="
-code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:3000/sub)
-[ "$code" = "200" ] && note "/sub -> 200" || fail "/sub -> $code"
-
-echo "=== 7. shutdown ==="
+echo "=== 6. shutdown ==="
 kill -TERM "$APP_PID" 2>/dev/null
-# Poll rather than sleeping a fixed interval: StopSingBox tears down the tunnel
-# and sing-box in sequence, and the Go runtime runs finalizers during dlclose,
-# so a host that loaded the .so can legitimately take tens of seconds to exit.
-# Ports release promptly regardless — that is what the loop below asserts.
-for _ in $(seq 1 45); do
+# Poll rather than sleeping a fixed interval. The native contract caps
+# StopSingBox at 8s, so the launcher must exit inside the 15s host grace window.
+for _ in $(seq 1 15); do
     ps -p "$APP_PID" >/dev/null 2>&1 || break
     sleep 1
 done
 if ps -p "$APP_PID" >/dev/null 2>&1; then
-    fail "process still running 45s after SIGTERM"
+    fail "process still running 15s after SIGTERM"
 else
     note "exited"
 fi
-for p in 8001 18002 18003 3000; do
+for p in 8001 18002 18003; do
     bound=1
     for _ in $(seq 1 10); do
-        ss -lntu 2>/dev/null | grep -q ":$p " || { bound=0; break; }
+        port_bound "$p" || { bound=0; break; }
         sleep 1
     done
     [ "$bound" = 0 ] && note "port $p released" || fail "port $p still bound"

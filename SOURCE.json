@@ -1,0 +1,12 @@
+{
+  "source_repository": "zzdccww/sbx-native",
+  "source_revision": "b82f1af0f796265663ef0f360d2ede911540ecbc",
+  "source_directory": "go-sbx",
+  "build_run": "https://github.com/zzdccww/sbx-native/actions/runs/36994803391",
+  "release_tag": "sbx-1.14.0-beta.2-20",
+  "build_type": "standard",
+  "artifacts": {
+    "sbx-linux-amd64.so": "c8e647ee677a0cd8050b99822981ca57a07078a65984c72bbfaaccc42e0d288b",
+    "sbx-linux-arm64.so": "1a856bed39982333044b6b9ff929370ca284b889feb1bb7d5f1de83d41a0f869"
+  }
+}
